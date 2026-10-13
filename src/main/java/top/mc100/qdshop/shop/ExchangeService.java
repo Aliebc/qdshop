@@ -13,44 +13,71 @@ import org.bukkit.inventory.MerchantInventory;
 
 import java.util.List;
 
-/** 为原生交易结算库存与收款，不扣玩家背包、不额外发货。 */
+/** 原生界面负责玩家扣款和发货；插件预留箱子库存，事件通过后收款。 */
 public final class ExchangeService {
     private ExchangeService() {}
 
-    public static boolean settleMerchantPurchase(Player player, MerchantInventory inventory, Shop shop, Trade trade) {
-        ItemStack cost = trade.getCost();
+    public static Reservation reserve(Player player, MerchantInventory inventory, Shop shop, Trade trade) {
+        ItemStack first = inventory.getItem(0), second = inventory.getItem(1);
+        ItemStack cost = trade.getCost(), cost2 = trade.getSecondCost();
+        if (cost2 == null) {
+            if (!enough(first, cost) && !enough(second, cost)) return null;
+        } else if (!((enough(first, cost) && enough(second, cost2))
+                || (enough(first, cost2) && enough(second, cost)))) return null;
         ItemStack result = trade.getResult();
-        // 原生商人允许输入物品交换槽位。只接受足额付款的有效输出操作。
-        if (!enough(inventory.getItem(0), cost) && !enough(inventory.getItem(1), cost)) return false;
         List<Container> stock = Containers.resolveAll(shop.getStockChests());
         if (stock.isEmpty()) {
             player.sendMessage(Component.text("商店未绑定有效库存箱，请联系管理员。", NamedTextColor.RED));
-            return false;
+            return null;
         }
         if (Containers.count(stock, result) < result.getAmount()) {
             player.sendMessage(Component.text("商店库存不足。", NamedTextColor.RED));
-            return false;
+            return null;
         }
         int removed = Containers.remove(stock, result, result.getAmount());
         if (removed != result.getAmount()) {
-            // 防止意外的容器变更导致部分扣货。
             if (removed > 0) {
                 ItemStack rollback = result.clone();
                 rollback.setAmount(removed);
                 depositOrDrop(stock, rollback, shop);
             }
-            return false;
+            return null;
         }
-        List<Container> receive = Containers.resolveAll(shop.receiveTargets());
-        if (receive.isEmpty()) receive = stock;
-        depositOrDrop(receive, cost.clone(), shop);
+        return new Reservation(shop, trade, stock);
+    }
+
+    public static boolean settleMerchantPurchase(Player player, MerchantInventory inventory, Shop shop, Trade trade) {
+        Reservation reservation = reserve(player, inventory, shop, trade);
+        if (reservation == null) return false;
+        reservation.commit();
         return true;
+    }
+
+    public static final class Reservation {
+        private final Shop shop;
+        private final Trade trade;
+        private final List<Container> stock;
+        private boolean finished;
+        private Reservation(Shop shop, Trade trade, List<Container> stock) {
+            this.shop = shop; this.trade = trade; this.stock = stock;
+        }
+        public void commit() {
+            if (finished) return;
+            finished = true;
+            List<Container> receive = Containers.resolveAll(shop.receiveTargets());
+            if (receive.isEmpty()) receive = stock;
+            for (ItemStack cost : trade.getCosts()) depositOrDrop(receive, cost.clone(), shop);
+        }
+        public void rollback() {
+            if (finished) return;
+            finished = true;
+            depositOrDrop(stock, trade.getResult().clone(), shop);
+        }
     }
 
     private static boolean enough(ItemStack input, ItemStack cost) {
         return input != null && input.isSimilar(cost) && input.getAmount() >= cost.getAmount();
     }
-
     private static void depositOrDrop(List<Container> targets, ItemStack item, Shop shop) {
         ItemStack leftover = Containers.add(targets, item);
         if (leftover != null) {

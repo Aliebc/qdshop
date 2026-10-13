@@ -2,7 +2,6 @@ package top.mc100.qdshop.command;
 
 import top.mc100.qdshop.QdShopPlugin;
 import top.mc100.qdshop.data.ShopStore;
-import top.mc100.qdshop.gui.CostSetupGui;
 import top.mc100.qdshop.model.Shop;
 import top.mc100.qdshop.perm.Perms;
 import top.mc100.qdshop.util.Msg;
@@ -27,7 +26,7 @@ import java.util.Locale;
 import java.util.TreeSet;
 
 public final class QdShopCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBCOMMANDS = List.of("help", "create", "remove", "open", "name", "inventory", "income", "owner", "add");
+    private static final List<String> SUBCOMMANDS = List.of("help", "create", "destroy", "remove", "reload", "open", "name", "inventory", "income", "owner", "add");
     private final QdShopPlugin plugin;
 
     public QdShopCommand(QdShopPlugin plugin) { this.plugin = plugin; }
@@ -39,9 +38,15 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         if (!SUBCOMMANDS.contains(sub)) { help(sender); return true; }
         if (!allowed(sender, sub)) { error(sender, "你没有权限执行这个命令。"); return true; }
         if (sub.equals("help")) { help(sender); return true; }
+        if (sub.equals("reload")) {
+            if (args.length != 1) { error(sender, "用法：/qdshop reload"); return true; }
+            plugin.reloadShopConfig();
+            success(sender, "已重新加载 config.yml 和 shops.yml。");
+            return true;
+        }
         boolean valid = switch (sub) {
             case "name" -> args.length >= 3;
-            case "owner" -> args.length == 3;
+            case "owner", "remove" -> args.length == 3;
             case "inventory", "income" -> args.length == 2 || args.length == 6;
             default -> args.length == 2;
         };
@@ -62,11 +67,24 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         Shop shop = store.get(id);
         if (shop == null) { error(sender, "找不到商店：" + id); return true; }
         switch (sub) {
-            case "remove" -> {
+            case "destroy" -> {
                 plugin.getGuiListener().closeViewers(shop);
                 store.remove(shop.getId());
                 store.save();
                 success(sender, "已删除商店：" + shop.getId());
+            }
+            case "remove" -> {
+                int number;
+                try { number = Integer.parseInt(args[2]); }
+                catch (NumberFormatException e) { error(sender, "商品编号必须是从 1 开始的整数。"); return true; }
+                if (number < 1 || number > shop.getTrades().size()) {
+                    error(sender, "商品编号不存在，有效范围：1 到 " + shop.getTrades().size());
+                    return true;
+                }
+                plugin.getGuiListener().closeViewers(shop);
+                shop.getTrades().remove(number - 1);
+                store.save();
+                success(sender, "已删除商店 " + shop.getId() + " 的第 " + number + " 个商品。");
             }
             case "name" -> {
                 shop.setDisplayName(String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
@@ -97,7 +115,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
                 ItemStack product = player.getInventory().getItemInMainHand();
                 if (product.getType().isAir()) { error(sender, "请把要出售的商品拿在主手。"); return true; }
                 if (product.getAmount() > product.getMaxStackSize()) { error(sender, "商品数量不能超过最大堆叠数。"); return true; }
-                new CostSetupGui(shop, product, player.getUniqueId()).open(player);
+                plugin.getGuiListener().openSetup(player, shop, product);
             }
             default -> { }
         }
@@ -143,6 +161,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         String tail = switch (sub) {
             case "name" -> " <name>";
             case "owner" -> " <player>";
+            case "remove" -> " <number>";
             case "inventory", "income" -> " [<x> <y> <z> <world>]";
             default -> "";
         };
@@ -156,7 +175,9 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Msg.mm("<gold>===== QIDIAN SHOP ====="));
         sender.sendMessage(Component.text("/qdshop help 显示帮助菜单"));
         sender.sendMessage(Component.text("/qdshop create <id> 创建商店"));
-        sender.sendMessage(Component.text("/qdshop remove <id> 删除商店"));
+        sender.sendMessage(Component.text("/qdshop destroy <id> 删除商店"));
+        sender.sendMessage(Component.text("/qdshop remove <id> <number> 删除第几个商品（编号从 1 开始）"));
+        sender.sendMessage(Component.text("/qdshop reload 重载 config.yml 和 shops.yml"));
         sender.sendMessage(Component.text("/qdshop open <id> 打开商店"));
         sender.sendMessage(Component.text("/qdshop name <id> <name> 设置商店显示名称"));
         sender.sendMessage(Component.text("/qdshop inventory <id> [<x> <y> <z> <world>] 设置存货容器（省略坐标则使用准星目标）"));
@@ -170,10 +191,15 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 0) return List.of();
         String sub = args[0].toLowerCase(Locale.ROOT);
         if (args.length == 1) return matches(SUBCOMMANDS.stream().filter(s -> allowed(sender, s)).toList(), args[0]);
-        if (!SUBCOMMANDS.contains(sub) || !allowed(sender, sub) || sub.equals("help")) return List.of();
+        if (!SUBCOMMANDS.contains(sub) || !allowed(sender, sub) || sub.equals("help") || sub.equals("reload")) return List.of();
         if (args.length == 2) {
             if (sub.equals("create")) return matches(List.of("<id>"), args[1]);
             return matches(plugin.getShopStore().all().stream().map(Shop::getId).toList(), args[1]);
+        }
+        if (sub.equals("remove") && args.length == 3) {
+            Shop shop = plugin.getShopStore().get(args[1]);
+            return matches(shop == null ? List.of() : java.util.stream.IntStream.rangeClosed(1, shop.getTrades().size())
+                    .mapToObj(String::valueOf).toList(), args[2]);
         }
         if (sub.equals("owner") && args.length == 3) {
             TreeSet<String> names = new TreeSet<>();

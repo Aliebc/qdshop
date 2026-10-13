@@ -70,6 +70,11 @@ class ExchangeServiceTest {
                     return new java.util.HashMap<Integer, ItemStack>();
                 });
             } else {
+                when(inventory.addItem(any(ItemStack.class))).thenAnswer(call -> {
+                    ItemStack added = call.getArgument(0);
+                    contents[0] = item("product", (contents[0] == null ? 0 : contents[0].getAmount()) + added.getAmount());
+                    return new java.util.HashMap<Integer, ItemStack>();
+                });
                 when(inventory.getContents()).thenAnswer(call -> contents.clone());
                 when(inventory.getSize()).thenReturn(1);
                 when(inventory.getItem(0)).thenAnswer(call -> contents[0]);
@@ -115,5 +120,32 @@ class ExchangeServiceTest {
         assertTrue(f.buy());
         assertEquals(3, f.contents[0].getAmount());
         assertEquals(2, f.received.get());
+    }
+    @Test void twoCostsAreBothRequiredAndBothDepositedIncludingSwappedSlots() {
+        Fixture f = new Fixture();
+        ItemStack secondCost = item("second-payment", 3);
+        Trade trade = new Trade(f.cost, secondCost, f.product);
+        assertFalse(ExchangeService.settleMerchantPurchase(f.player, f.inputs, f.shop, trade));
+        assertEquals(6, f.contents[0].getAmount());
+        when(f.inputs.getItem(0)).thenReturn(item("second-payment", 3));
+        when(f.inputs.getItem(1)).thenReturn(item("payment", 2));
+        assertTrue(ExchangeService.settleMerchantPurchase(f.player, f.inputs, f.shop, trade));
+        assertEquals(5, f.received.get());
+        assertEquals(3, f.contents[0].getAmount());
+    }
+
+    @Test void identicalCostsCannotReuseOneInputStackAndCancellationRestoresReservedStock() {
+        Fixture f = new Fixture();
+        Trade trade = new Trade(f.cost, item("payment", 3), f.product);
+        when(f.inputs.getItem(0)).thenReturn(item("payment", 5));
+        assertNull(ExchangeService.reserve(f.player, f.inputs, f.shop, trade));
+        when(f.inputs.getItem(0)).thenReturn(item("payment", 2));
+        when(f.inputs.getItem(1)).thenReturn(item("payment", 3));
+        var reservation = ExchangeService.reserve(f.player, f.inputs, f.shop, trade);
+        assertNotNull(reservation);
+        assertEquals(3, f.contents[0].getAmount());
+        reservation.rollback(); reservation.rollback(); reservation.commit();
+        assertEquals(6, f.contents[0].getAmount());
+        assertEquals(0, f.received.get());
     }
 }

@@ -25,22 +25,20 @@ public final class ShopGui {
         for (Trade trade : shop.getTrades()) {
             if (!valid(trade)) continue;
             // 复制配置，窗口中的报价不随外部修改而变化。
-            Trade snapshot = new Trade(trade.getCost().clone(), trade.getResult().clone());
+            Trade snapshot = new Trade(trade.getCost().clone(),
+                    trade.getSecondCost() == null ? null : trade.getSecondCost().clone(), trade.getResult().clone());
             trades.add(snapshot);
             MerchantRecipe recipe = new MerchantRecipe(snapshot.getResult().clone(),
                     0, Integer.MAX_VALUE, false, 0, 0f, 0, 0, true);
-            recipe.addIngredient(snapshot.getCost().clone());
+            for (var cost : snapshot.getCosts()) recipe.addIngredient(cost.clone());
             recipes.add(recipe);
         }
         merchant.setRecipes(recipes);
     }
 
     private static boolean valid(Trade trade) {
-        return trade != null && trade.getCost() != null && trade.getResult() != null
-                && !trade.getCost().getType().isAir() && !trade.getResult().getType().isAir()
-                && trade.getCost().getAmount() > 0 && trade.getResult().getAmount() > 0
-                && trade.getCost().getAmount() <= trade.getCost().getMaxStackSize()
-                && trade.getResult().getAmount() <= trade.getResult().getMaxStackSize();
+        return trade != null && Trade.validItem(trade.getCost()) && Trade.validItem(trade.getResult())
+                && (trade.getSecondCost() == null || Trade.validItem(trade.getSecondCost()));
     }
 
     public void open(Player player) {

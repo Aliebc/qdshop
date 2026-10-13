@@ -14,7 +14,8 @@ import java.util.UUID;
 
 /** 管理员用箱子界面设置付款样品；商品只复制主手样品。 */
 public final class CostSetupGui implements InventoryHolder {
-    public static final int COST_SLOT = 13;
+    public static final int COST_SLOT = 12;
+    public static final int SECOND_COST_SLOT = 14;
     public static final int CONFIRM_SLOT = 22;
     public static final int CANCEL_SLOT = 26;
     private final Shop shop;
@@ -28,10 +29,11 @@ public final class CostSetupGui implements InventoryHolder {
         this.product = product.clone();
         this.editor = editor;
         inventory = Bukkit.createInventory(this, 27, Msg.mm("<dark_green>添加商品: <white>" + shop.getDisplayName()));
-        ItemStack filler = button(Material.GRAY_STAINED_GLASS_PANE, "<gray>将付款物品放入中间槽位");
+        ItemStack filler = button(Material.GRAY_STAINED_GLASS_PANE, "<gray>将付款物品放入两个空槽，第二槽可留空");
         for (int i = 0; i < inventory.getSize(); i++) inventory.setItem(i, filler);
         inventory.setItem(COST_SLOT, null);
-        inventory.setItem(11, this.product.clone());
+        inventory.setItem(SECOND_COST_SLOT, null);
+        inventory.setItem(10, this.product.clone());
         inventory.setItem(CONFIRM_SLOT, button(Material.LIME_WOOL, "<green>确认上架（付款样品会退还）"));
         inventory.setItem(CANCEL_SLOT, button(Material.RED_WOOL, "<red>取消"));
     }
@@ -44,6 +46,7 @@ public final class CostSetupGui implements InventoryHolder {
         return item;
     }
 
+    public static boolean isCostSlot(int slot) { return slot == COST_SLOT || slot == SECOND_COST_SLOT; }
     public void open(Player player) { player.openInventory(inventory); }
     public Shop getShop() { return shop; }
     public ItemStack getProduct() { return product.clone(); }

@@ -29,7 +29,9 @@ permissions:
       qdshop.use: true
       qdshop.chest.open: true
       qdshop.command.create: true
+      qdshop.command.destroy: true
       qdshop.command.remove: true
+      qdshop.command.reload: true
       qdshop.command.name: true
       qdshop.command.inventory: true
       qdshop.command.income: true
@@ -41,8 +43,14 @@ permissions:
   qdshop.command.create:
     description: 创建商店
     default: op
-  qdshop.command.remove:
+  qdshop.command.destroy:
     description: 删除商店
+    default: op
+  qdshop.command.reload:
+    description: 重载配置文件
+    default: op
+  qdshop.command.remove:
+    description: 按编号删除商品
     default: op
   qdshop.command.name:
     description: 修改商店显示名称

@@ -102,7 +102,7 @@ class QdShopCommandTest {
             bukkit.when(Bukkit::getOfflinePlayers).thenReturn(new OfflinePlayer[0]);
             when(player.getName()).thenReturn("Owner");
             bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(player));
-            assertEquals(9, command.onTabComplete(player, null, "qdshop", new String[]{""}).size());
+            assertEquals(11, command.onTabComplete(player, null, "qdshop", new String[]{""}).size());
             assertEquals(List.of("demo"), command.onTabComplete(player, null, "qdshop", new String[]{"add", "d"}));
             assertEquals(List.of("10"), command.onTabComplete(player, null, "qdshop", new String[]{"inventory", "demo", ""}));
             assertEquals(List.of("64"), command.onTabComplete(player, null, "qdshop", new String[]{"income", "demo", "10", ""}));
@@ -110,5 +110,30 @@ class QdShopCommandTest {
             assertEquals(List.of("world"), command.onTabComplete(player, null, "qdshop", new String[]{"income", "demo", "10", "64", "20", "w"}));
             assertEquals(List.of("Owner"), command.onTabComplete(player, null, "qdshop", new String[]{"owner", "demo", "O"}));
         }
+    }
+    @Test void removeUsesOneBasedProductNumberAndKeepsShop() {
+        top.mc100.qdshop.gui.GuiListener guiListener = mock(top.mc100.qdshop.gui.GuiListener.class);
+        when(plugin.getGuiListener()).thenReturn(guiListener);
+        top.mc100.qdshop.model.Trade first = mock(top.mc100.qdshop.model.Trade.class);
+        top.mc100.qdshop.model.Trade second = mock(top.mc100.qdshop.model.Trade.class);
+        shop.getTrades().add(first); shop.getTrades().add(second);
+        execute("remove", "demo", "0");
+        execute("remove", "demo", "3");
+        assertEquals(2, shop.getTrades().size());
+        execute("remove", "demo", "1");
+        assertEquals(List.of(second), shop.getTrades());
+        verify(store, never()).remove(anyString());
+        verify(store, times(1)).save();
+        assertEquals(List.of("1"), command.onTabComplete(player, null, "qdshop", new String[]{"remove", "demo", ""}));
+    }
+
+    @Test void destroyDeletesWholeShopAndReloadHasNoIdParameter() {
+        when(plugin.getGuiListener()).thenReturn(mock(top.mc100.qdshop.gui.GuiListener.class));
+        execute("destroy", "demo");
+        verify(store).remove("demo");
+        execute("reload");
+        execute("reload", "unexpected");
+        verify(plugin, times(1)).reloadShopConfig();
+        assertTrue(command.onTabComplete(player, null, "qdshop", new String[]{"reload", ""}).isEmpty());
     }
 }

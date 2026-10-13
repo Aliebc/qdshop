@@ -14,6 +14,7 @@ import top.mc100.qdshop.perm.Perms;
 
 import java.util.HashMap;
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -69,7 +70,7 @@ class GuiListenerTest {
         assertNull(slot.get());
     }
 
-    @Test void rapidConfirmOnlyAddsOneTradeAndKeepsSampleForCloseRefund() {
+    @Test void rapidConfirmOnlyAddsOneTradeAndKeepsSamplesUntilRefundTask() {
         AtomicBoolean finishing = new AtomicBoolean();
         when(gui.isFinishing()).thenAnswer(call -> finishing.get());
         doAnswer(call -> { finishing.set(true); return null; }).when(gui).setFinishing();
@@ -99,14 +100,59 @@ class GuiListenerTest {
         InventoryDragEvent event = mock(InventoryDragEvent.class);
         when(event.getInventory()).thenReturn(inventory);
         when(event.getWhoClicked()).thenReturn(player);
-        when(event.getRawSlots()).thenReturn(Set.of(11, 13));
+        when(event.getRawSlots()).thenReturn(Set.of(11, CostSetupGui.COST_SLOT));
         listener.onSetupDrag(event);
         verify(event).setCancelled(true);
         reset(event);
         when(event.getInventory()).thenReturn(inventory);
         when(event.getWhoClicked()).thenReturn(player);
-        when(event.getRawSlots()).thenReturn(Set.of(13, 30));
+        when(event.getRawSlots()).thenReturn(Set.of(CostSetupGui.COST_SLOT, CostSetupGui.SECOND_COST_SLOT, 30));
         listener.onSetupDrag(event);
         verify(event, never()).setCancelled(true);
+    }
+    @Test void confirmTaskReturnsBothSamplesEvenWithoutCloseEvent() {
+        ItemStack second = mock(ItemStack.class);
+        when(second.getType()).thenReturn(mock(Material.class));
+        when(second.getAmount()).thenReturn(3);
+        when(second.getMaxStackSize()).thenReturn(64);
+        when(second.clone()).thenReturn(second);
+        AtomicReference<ItemStack> firstSlot = new AtomicReference<>(cost);
+        AtomicReference<ItemStack> secondSlot = new AtomicReference<>(second);
+        when(inventory.getItem(CostSetupGui.COST_SLOT)).thenAnswer(call -> firstSlot.get());
+        when(inventory.getItem(CostSetupGui.SECOND_COST_SLOT)).thenAnswer(call -> secondSlot.get());
+        doAnswer(call -> { firstSlot.set(call.getArgument(1)); return null; })
+                .when(inventory).setItem(eq(CostSetupGui.COST_SLOT), nullable(ItemStack.class));
+        doAnswer(call -> { secondSlot.set(call.getArgument(1)); return null; })
+                .when(inventory).setItem(eq(CostSetupGui.SECOND_COST_SLOT), nullable(ItemStack.class));
+        when(gui.getProduct()).thenReturn(mock(ItemStack.class));
+        PlayerInventory backpack = mock(PlayerInventory.class);
+        when(player.getInventory()).thenReturn(backpack);
+        when(backpack.addItem(any(ItemStack.class))).thenReturn(new HashMap<>());
+        InventoryView view = mock(InventoryView.class);
+        when(player.getOpenInventory()).thenReturn(view);
+        when(view.getTopInventory()).thenReturn(inventory);
+        InventoryClickEvent click = mock(InventoryClickEvent.class);
+        when(click.getInventory()).thenReturn(inventory);
+        when(click.getWhoClicked()).thenReturn(player);
+        when(click.getRawSlot()).thenReturn(CostSetupGui.CONFIRM_SLOT);
+        when(click.getAction()).thenReturn(InventoryAction.PICKUP_ALL);
+        when(click.getClick()).thenReturn(ClickType.LEFT);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            BukkitScheduler scheduler = mock(BukkitScheduler.class);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            listener.onSetupClick(click);
+            org.mockito.ArgumentCaptor<Runnable> task = org.mockito.ArgumentCaptor.forClass(Runnable.class);
+            verify(scheduler).runTask(eq(plugin), task.capture());
+            task.getValue().run();
+            assertEquals(List.of(cost, second), shop.getTrades().getFirst().getCosts());
+            verify(backpack).addItem(cost);
+            verify(backpack).addItem(second);
+            assertNull(firstSlot.get()); assertNull(secondSlot.get());
+            InventoryCloseEvent close = mock(InventoryCloseEvent.class);
+            when(close.getInventory()).thenReturn(inventory); when(close.getPlayer()).thenReturn(player);
+            listener.onClose(close);
+            verify(backpack, times(1)).addItem(cost);
+            verify(backpack, times(1)).addItem(second);
+        }
     }
 }

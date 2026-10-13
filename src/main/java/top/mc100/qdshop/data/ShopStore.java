@@ -98,15 +98,14 @@ public class ShopStore {
                 Location l = parseLoc(raw);
                 if (l != null) shop.addIncomeChest(l);
             }
-            // 兼容旧版：单字段 chest（既是取货箱也是收货箱）
-            if (shop.getStockChests().isEmpty()) {
-                Location legacy = parseLoc(s.getString("chest"));
-                if (legacy != null) shop.addStockChest(legacy);
-            }
             for (Map<?, ?> t : s.getMapList("trades")) {
-                ItemStack cost = (ItemStack) t.get("cost");
-                ItemStack result = (ItemStack) t.get("result");
-                if (cost != null && result != null) shop.getTrades().add(new Trade(cost, result));
+                Object rawCosts = t.get("costs");
+                Object rawResult = t.get("result");
+                if (!(rawCosts instanceof List<?> costs) || costs.isEmpty() || costs.size() > 2
+                        || !(rawResult instanceof ItemStack result) || !(costs.getFirst() instanceof ItemStack cost)) continue;
+                ItemStack secondCost = costs.size() == 2 && costs.get(1) instanceof ItemStack item ? item : null;
+                if (costs.size() == 2 && secondCost == null) continue;
+                shop.getTrades().add(new Trade(cost, secondCost, result));
             }
             byId.put(id.toLowerCase(Locale.ROOT), shop);
         }
@@ -127,7 +126,7 @@ public class ShopStore {
             List<Map<String, Object>> trades = new ArrayList<>();
             for (Trade t : shop.getTrades()) {
                 Map<String, Object> m = new LinkedHashMap<>();
-                m.put("cost", t.getCost());
+                m.put("costs", t.getCosts());
                 m.put("result", t.getResult());
                 trades.add(m);
             }
