@@ -106,7 +106,11 @@ public class ShopStore {
                         || !(rawResult instanceof ItemStack result) || !(costs.getFirst() instanceof ItemStack cost)) continue;
                 ItemStack secondCost = costs.size() == 2 && costs.get(1) instanceof ItemStack item ? item : null;
                 if (costs.size() == 2 && secondCost == null) continue;
-                shop.getTrades().add(new Trade(cost, secondCost, result));
+                String extensionId = t.get("extension") instanceof String value ? value : null;
+                List<String> arguments = t.get("arguments") instanceof List<?> values
+                        ? values.stream().map(String::valueOf).toList() : List.of();
+                UUID tradeId = t.get("id") instanceof String value ? UUID.fromString(value) : UUID.randomUUID();
+                shop.getTrades().add(new Trade(cost, secondCost, result, extensionId, arguments, tradeId));
             }
             byId.put(id.toLowerCase(Locale.ROOT), shop);
         }
@@ -128,8 +132,13 @@ public class ShopStore {
             List<Map<String, Object>> trades = new ArrayList<>();
             for (Trade t : shop.getTrades()) {
                 Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", t.getTradeId().toString());
                 m.put("costs", t.getCosts());
                 m.put("result", t.getResult());
+                if (t.getExtensionId() != null) {
+                    m.put("extension", t.getExtensionId());
+                    m.put("arguments", t.getExtensionArguments());
+                }
                 trades.add(m);
             }
             yml.set(base + "trades", trades);

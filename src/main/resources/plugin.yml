@@ -37,7 +37,10 @@ permissions:
       qdshop.command.income: true
       qdshop.command.owner: true
       qdshop.command.add: true
+      qdshop.command.addex: true
       qdshop.command.infinite: true
+      qdshop.command.extension.list: true
+      qdshop.command.extension.reload: true
   qdshop.chest.open:
     description: 允许打开或破坏商店库存及收货箱
     default: op
@@ -73,4 +76,13 @@ permissions:
     default: true
   qdshop.command.infinite:
     description: 设置商店无限供货
+    default: op
+  qdshop.command.extension.list:
+    description: 列出安装的拓展
+    default: op
+  qdshop.command.extension.reload:
+    description: 重新扫描并加载拓展 JAR
+    default: op
+  qdshop.command.addex:
+    description: 添加拓展商品
     default: op

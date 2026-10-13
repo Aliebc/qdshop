@@ -3,6 +3,7 @@ package top.mc100.qdshop;
 import top.mc100.qdshop.command.QdShopCommand;
 import top.mc100.qdshop.data.ShopStore;
 import top.mc100.qdshop.data.TransactionDatabase;
+import top.mc100.qdshop.extension.ExtensionRegistry;
 import top.mc100.qdshop.gui.GuiListener;
 import top.mc100.qdshop.listener.ChestListener;
 import top.mc100.qdshop.perm.Perms;
@@ -15,11 +16,14 @@ public final class QdShopPlugin extends JavaPlugin {
     private Perms perms;
     private GuiListener guiListener;
     private TransactionDatabase transactionDatabase;
+    private ExtensionRegistry extensionRegistry;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         try {
+            extensionRegistry = new ExtensionRegistry(getDataFolder().toPath().resolve("extensions"), getLogger());
+            extensionRegistry.reload();
             transactionDatabase = new TransactionDatabase(getDataFolder().toPath().resolve("transactions.db"), getLogger());
         } catch (java.io.IOException | java.sql.SQLException e) {
             getLogger().log(java.util.logging.Level.SEVERE, "无法初始化交易数据库，插件停止加载。", e);
@@ -44,6 +48,7 @@ public final class QdShopPlugin extends JavaPlugin {
     public void onDisable() {
         if (guiListener != null) guiListener.closeAll();
         if (shopStore != null) shopStore.save();
+        if (extensionRegistry != null) extensionRegistry.close();
         if (transactionDatabase != null) transactionDatabase.close();
     }
 
@@ -53,6 +58,7 @@ public final class QdShopPlugin extends JavaPlugin {
         shopStore.load();
     }
 
+    public ExtensionRegistry getExtensionRegistry() { return extensionRegistry; }
     public TransactionDatabase getTransactionDatabase() { return transactionDatabase; }
     public ShopStore getShopStore() { return shopStore; }
     public GuiListener getGuiListener() { return guiListener; }

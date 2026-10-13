@@ -14,6 +14,7 @@ SQLite 驱动及其原生库已包含在插件 JAR 中，不需要额外安装�
 
 | 命令 | 功能 |
 | --- | --- |
+| `/qdshop version` | 显示插件版本，所有人均可使用 |
 | `/qdshop help` | 显示帮助，直接输入 `/qdshop` 也显示帮助 |
 | `/qdshop create <id>` | 创建商店，默认显示名称为 id |
 | `/qdshop destroy <id>` | 删除整个商店 |
@@ -25,7 +26,10 @@ SQLite 驱动及其原生库已包含在插件 JAR 中，不需要额外安装�
 | `/qdshop income <id>` | 设置准星对准的容器为收入箱 |
 | `/qdshop income <id> <x> <y> <z> <world>` | 按坐标设置收入箱 |
 | `/qdshop owner <id> <player>` | 设置商店主人，支持在线或本服已记录的离线玩家 |
-| `/qdshop add <id>` | 主手拿商品，打开箱子界面设置一至两种付款物品 |
+| `/qdshop add <id>` | 添加主手普通商品，设置一至两种付款 |
+| `/qdshop addex <id> <extension> [<arguments>...]` | 按拓展 ID 和参数生成商品预览，再设置一至两种付款 |
+| `/qdshop extension list` | 列出已加载拓展，绿色为成功，红色为加载失败的 JAR，悬停查看描述和作者 |
+| `/qdshop extension reload` | 关闭商店及添加窗口，重新扫描 `extensions` 中的 JAR 并加载 |
 | `/qdshop infinite <id> true\|false` | 设置指定商店无限供货，默认 false |
 | `/qdshop reload` | 重载 `config.yml` 和 `shops.yml`，关闭商店及添加窗口并退还样品，保留数据库历史 |
 
@@ -60,11 +64,12 @@ SQLite 驱动及其原生库已包含在插件 JAR 中，不需要额外安装�
 ## 权限
 
 总权限为 `qdshop.*`，管理员权限为 `qdshop.admin`，交易权限为 `qdshop.use`。
-管理命令节点为 `qdshop.command.<子命令>`，包括 `create`、`destroy`、`remove`、`reload`、`name`、`inventory`、`income`、`owner`、`add`、`infinite`。
+管理命令节点为 `qdshop.command.<子命令>`，包括 `create`、`destroy`、`remove`、`reload`、`name`、`inventory`、`income`、`owner`、`add`、`addex`、`infinite`。
 帮助节点为 `qdshop.command.help`。帮助和交易默认所有人可用，其余默认 OP；装有 LuckPerms 时可通过节点授权。
 箱子权限为 `qdshop.chest.open` 或 `qdshop.shop.<id>.chest.open`。
 主人 UUID 保存在商店 `owner` 字段，优先获得本店存货、收入容器的打开和破坏权限，即使 LP 明确拒绝开箱也允许。
-主人身份不授予其他管理命令权限。
+主人自动拥有本店 `add`、`remove`、`inventory`、`income` 权限，主人身份优先于 LP 拒绝；不能据此管理其他商店。
+`addex`、`destroy`、`owner`、`name`、`infinite` 等操作仍需相应 LP/管理员权限。
 
 ## SQLite 交易记录
 
@@ -92,3 +97,31 @@ SELECT datetime(occurred_at_ms / 1000, 'unixepoch', '+8 hours') AS time_cn,
        income2_type, income2_amount
 FROM transactions ORDER BY id DESC LIMIT 20;
 ```
+
+
+## 拓展物品
+
+插件启动时创建并扫描 `plugins/qdshop/extensions/`。
+将独立示例 `player-skull-1.0.0.jar` 放入此目录，执行 `/qdshop extension reload`，再用 `/qdshop extension list` 检查。
+示例不内置在主插件中，也不是 Paper 插件，不要直接放入服务器 `plugins/` 根目录。
+
+```text
+/qdshop addex example player_skull
+/qdshop addex example player_skull 2
+```
+
+以上命令无需主手物品，会打开价格设置窗口。可选参数为头颅数量，范围 1-64。
+每位玩家打开商店时重新生成该玩家自己的头颅，使用其当前 PlayerProfile 皮肤。
+拓展默认动态生成供货，不需要库存，也不要求整个商店启用 infinite；付款、收入与 SQLite 记录仍正常处理。
+如果拓展显式要求库存，则按生成物品的完整数据匹配库存。
+拓展缺失或生成失败时保留商品位置并显示不可交易状态，不出售保存的预览物品。
+商品配置额外保存 `extension` ID 和 `arguments` 字符串列表。
+
+拓展重载会执行旧拓展的 `onDisable()`，关闭旧 JAR 类加载器，然后重新扫描。
+重复 ID 或损坏 JAR 不会阻止其他有效 JAR 加载；API 直接注册的拓展会保留。
+权限为 `qdshop.command.extension.list` 和 `qdshop.command.extension.reload`，默认 OP，均包含在 `qdshop.admin` 中。
+API 和示例开发说明见 [examples/player-skull/README.md](examples/player-skull/README.md)。
+
+拓展还可通过 `quote(TradeContext)` 动态决定是否允许成交及实际两格价格，返回恢复时间后会自动刷新冷却状态。
+`onShopOpen` 收到打开界面的玩家；`onTradeCommitted` 可立即更新价格/限购；`onTradeCompleted` 在原生结算结束后收到实际商品、实际价格与买家信息。
+商品 UUID 持久化到 `shops.yml` 的商品 `id` 字段，便于拓展稳定识别商品。冷却和涨价实现示例见拓展开发说明。

@@ -60,6 +60,16 @@ public final class Perms {
         return p.isOp();                      // 无 LuckPerms：退化为 OP 判断
     }
 
+    public static boolean isOwnerCommand(String sub) {
+        return java.util.Set.of("add", "remove", "inventory", "income").contains(sub);
+    }
+
+    /** 主人优先获得指定商店的四项管理权限，其余操作继续使用管理员/LP 权限。 */
+    public boolean canManage(Player player, Shop shop, String sub) {
+        if (isOwnerCommand(sub) && shop != null && shop.isOwner(player.getUniqueId())) return true;
+        return admin(player, sub);
+    }
+
     /** 某个摊位专属的"开箱"权限节点：qdshop.shop.&lt;id&gt;.chest.open。 */
     public static String shopChestNode(Shop shop) {
         return "qdshop.shop." + shop.getId() + ".chest.open";

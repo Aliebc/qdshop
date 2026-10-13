@@ -31,6 +31,7 @@ class QdShopCommandTest {
     QdShopCommandTest() {
         when(plugin.getShopStore()).thenReturn(store);
         when(plugin.getPerms()).thenReturn(perms);
+        when(perms.canManage(eq(player), any(), anyString())).thenAnswer(call -> perms.admin(player, call.getArgument(2)));
         when(store.get("demo")).thenReturn(shop);
         when(store.all()).thenReturn(List.of(shop));
         when(perms.admin(eq(player), anyString())).thenReturn(true);
@@ -47,6 +48,27 @@ class QdShopCommandTest {
     }
 
     private void execute(String... args) { command.onCommand(player, null, "qdshop", args); }
+
+    @Test void versionIsPublicForPlayersAndConsoleAndUsesPluginMetadata() {
+        var metadata = mock(io.papermc.paper.plugin.configuration.PluginMeta.class);
+        when(plugin.getPluginMeta()).thenReturn(metadata);
+        when(metadata.getVersion()).thenReturn("2.3.4");
+        when(player.hasPermission(anyString())).thenReturn(false);
+        when(perms.admin(eq(player), anyString())).thenReturn(false);
+        when(perms.canTrade(player)).thenReturn(false);
+        var console = mock(org.bukkit.command.ConsoleCommandSender.class);
+        for (org.bukkit.command.CommandSender sender : List.of(player, console)) {
+            assertTrue(command.onCommand(sender, null, "qdshop", new String[]{"version"}));
+            var messages = org.mockito.ArgumentCaptor.forClass(net.kyori.adventure.text.Component.class);
+            verify(sender, times(4)).sendMessage(messages.capture());
+            assertEquals(List.of("QIDIAN SHOP 起点商店交易系统", "版本: 2.3.4",
+                            "提供MC服务器交易系统，由起点服务器开发", "(C) 2026 MC100.TOP"),
+                    messages.getAllValues().stream().map(message ->
+                            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(message)).toList());
+            assertEquals(List.of("version"), command.onTabComplete(sender, null, "qdshop", new String[]{"ver"}));
+            assertTrue(command.onTabComplete(sender, null, "qdshop", new String[]{"version", ""}).isEmpty());
+        }
+    }
 
     @Test void targetBindingReplacesPriorInventoryContainer() {
         shop.addStockChest(new Location(world, 1, 64, 1));
@@ -102,7 +124,7 @@ class QdShopCommandTest {
             bukkit.when(Bukkit::getOfflinePlayers).thenReturn(new OfflinePlayer[0]);
             when(player.getName()).thenReturn("Owner");
             bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(player));
-            assertEquals(12, command.onTabComplete(player, null, "qdshop", new String[]{""}).size());
+            assertEquals(15, command.onTabComplete(player, null, "qdshop", new String[]{""}).size());
             assertEquals(List.of("demo"), command.onTabComplete(player, null, "qdshop", new String[]{"add", "d"}));
             assertEquals(List.of("10"), command.onTabComplete(player, null, "qdshop", new String[]{"inventory", "demo", ""}));
             assertEquals(List.of("64"), command.onTabComplete(player, null, "qdshop", new String[]{"income", "demo", "10", ""}));
@@ -148,5 +170,48 @@ class QdShopCommandTest {
         verify(store, times(2)).save();
         verify(gui, times(2)).queueStockRefresh(shop);
         assertEquals(List.of("false", "true"), command.onTabComplete(player, null, "qdshop", new String[]{"infinite", "demo", ""}));
+    }
+    @Test void extensionAddPassesIdAndArgumentsWithoutRequiringMainHandItem() {
+        var registry = mock(top.mc100.qdshop.extension.ExtensionRegistry.class);
+        var gui = mock(top.mc100.qdshop.gui.GuiListener.class);
+        var item = mock(org.bukkit.inventory.ItemStack.class);
+        when(plugin.getExtensionRegistry()).thenReturn(registry); when(plugin.getGuiListener()).thenReturn(gui);
+        when(registry.createItem(eq("player_skull"), any(), eq(List.of("2")))).thenReturn(item);
+        execute("addex", "demo", "player_skull", "2");
+        verify(gui).openSetup(player, shop, item, "player_skull", List.of("2"));
+        verify(player, never()).getInventory();
+        assertEquals(List.of("list", "reload"), command.onTabComplete(player, null, "qdshop", new String[]{"extension", ""}));
+    }
+
+    @Test void extensionReloadClosesWindowsBeforeRescanningJars() throws Exception {
+        var registry = mock(top.mc100.qdshop.extension.ExtensionRegistry.class);
+        var gui = mock(top.mc100.qdshop.gui.GuiListener.class);
+        when(plugin.getExtensionRegistry()).thenReturn(registry); when(plugin.getGuiListener()).thenReturn(gui);
+        execute("extension", "reload");
+        var ordered = inOrder(gui, registry); ordered.verify(gui).closeAll(); ordered.verify(registry).reload();
+    }
+    @Test void addRejectsExtensionArgumentsAndAddexHasIndependentPermission() {
+        when(perms.admin(player, "addex")).thenReturn(false);
+        execute("add", "demo", "player_skull");
+        execute("addex", "demo", "player_skull");
+        verify(player, never()).getInventory();
+        verify(plugin, never()).getExtensionRegistry();
+        verify(perms).admin(player, "addex");
+    }
+    @Test void ownerCompletionsAndExecutionAreLimitedToOwnShop() {
+        java.util.UUID owner = java.util.UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(owner); shop.setOwner(owner);
+        Shop other = new Shop("other"); when(store.get("other")).thenReturn(other); when(store.all()).thenReturn(List.of(shop, other));
+        when(perms.admin(eq(player), anyString())).thenReturn(false);
+        when(perms.canManage(eq(player), any(), anyString())).thenAnswer(call -> {
+            Shop target = call.getArgument(1); String sub = call.getArgument(2);
+            return Perms.isOwnerCommand(sub) && target != null && target.isOwner(owner);
+        });
+        assertEquals(List.of("demo"), command.onTabComplete(player, null, "qdshop", new String[]{"inventory", ""}));
+        var subcommands = command.onTabComplete(player, null, "qdshop", new String[]{""});
+        assertTrue(subcommands.containsAll(List.of("add", "remove", "inventory", "income")));
+        assertFalse(subcommands.contains("destroy")); assertFalse(subcommands.contains("addex"));
+        execute("inventory", "other"); assertTrue(other.getStockChests().isEmpty()); verify(store, never()).save();
+        execute("inventory", "demo"); assertEquals(List.of(block.getLocation()), shop.getStockChests()); verify(store).save();
     }
 }

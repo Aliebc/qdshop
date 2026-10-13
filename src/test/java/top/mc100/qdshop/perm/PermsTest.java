@@ -28,7 +28,13 @@ class PermsTest {
             Player owner = mock(Player.class);
             when(owner.getUniqueId()).thenReturn(ownerId);
             assertTrue(perms.canOpenChest(owner, shop));
-            verify(owner, never()).hasPermission(anyString());
+            for (String sub : java.util.List.of("add", "remove", "inventory", "income")) {
+                assertTrue(perms.canManage(owner, shop, sub));
+                assertFalse(perms.canManage(owner, new Shop("other"), sub));
+            }
+            assertFalse(perms.canManage(owner, shop, "destroy"));
+            assertFalse(perms.canManage(owner, shop, "addex"));
+
             Player other = mock(Player.class);
             when(other.getUniqueId()).thenReturn(UUID.randomUUID());
             assertFalse(perms.canOpenChest(other, shop));

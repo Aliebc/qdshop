@@ -5,6 +5,7 @@ import top.mc100.qdshop.data.ShopStore;
 import top.mc100.qdshop.model.Shop;
 import top.mc100.qdshop.perm.Perms;
 import top.mc100.qdshop.util.Msg;
+import top.mc100.qdshop.extension.ExtensionContext;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -26,7 +27,7 @@ import java.util.Locale;
 import java.util.TreeSet;
 
 public final class QdShopCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBCOMMANDS = List.of("help", "create", "destroy", "remove", "reload", "open", "name", "inventory", "income", "owner", "add", "infinite");
+    private static final List<String> SUBCOMMANDS = List.of("help", "version", "create", "destroy", "remove", "reload", "open", "name", "inventory", "income", "owner", "add", "addex", "infinite", "extension");
     private final QdShopPlugin plugin;
 
     public QdShopCommand(QdShopPlugin plugin) { this.plugin = plugin; }
@@ -36,8 +37,20 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 0) { help(sender); return true; }
         String sub = args[0].toLowerCase(Locale.ROOT);
         if (!SUBCOMMANDS.contains(sub)) { help(sender); return true; }
-        if (!allowed(sender, sub)) { error(sender, "你没有权限执行这个命令。"); return true; }
+        if (!allowed(sender, sub, args.length > 1 ? plugin.getShopStore().get(args[1]) : null)) { error(sender, "你没有权限执行这个命令。"); return true; }
+        if (sub.equals("version")) {
+            if (args.length != 1) { error(sender, "用法：/qdshop version"); return true; }
+            sender.sendMessage(Component.text("QIDIAN SHOP 起点商店交易系统"));
+            sender.sendMessage(Component.text("版本: " + plugin.getPluginMeta().getVersion()));
+            sender.sendMessage(Component.text("提供MC服务器交易系统，由起点服务器开发"));
+            sender.sendMessage(Component.text("(C) 2026 MC100.TOP"));
+            return true;
+        }
         if (sub.equals("help")) { help(sender); return true; }
+        if (sub.equals("extension")) {
+            extensionCommand(sender, args);
+            return true;
+        }
         if (sub.equals("reload")) {
             if (args.length != 1) { error(sender, "用法：/qdshop reload"); return true; }
             plugin.reloadShopConfig();
@@ -46,6 +59,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         }
         boolean valid = switch (sub) {
             case "name" -> args.length >= 3;
+            case "addex" -> args.length >= 3;
             case "owner", "remove", "infinite" -> args.length == 3;
             case "inventory", "income" -> args.length == 2 || args.length == 6;
             default -> args.length == 2;
@@ -120,16 +134,60 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
                 store.save();
                 success(sender, "已设置商店主人：" + (owner.getName() == null ? args[2] : owner.getName()));
             }
-            case "add" -> {
+            case "add", "addex" -> {
                 if (!(sender instanceof Player player)) { error(sender, "添加商品需要由玩家执行。"); return true; }
-                ItemStack product = player.getInventory().getItemInMainHand();
-                if (product.getType().isAir()) { error(sender, "请把要出售的商品拿在主手。"); return true; }
-                if (product.getAmount() > product.getMaxStackSize()) { error(sender, "商品数量不能超过最大堆叠数。"); return true; }
-                plugin.getGuiListener().openSetup(player, shop, product);
+                if (sub.equals("addex")) {
+                    String extensionId = args[2];
+                    List<String> arguments = List.copyOf(Arrays.asList(args).subList(3, args.length));
+                    try {
+                        ItemStack product = plugin.getExtensionRegistry().createItem(extensionId,
+                                new ExtensionContext(player, shop.getId()), arguments);
+                        plugin.getGuiListener().openSetup(player, shop, product, extensionId, arguments);
+                    } catch (Exception | LinkageError e) {
+                        error(sender, "拓展物品创建失败：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+                    }
+                } else {
+                    ItemStack product = player.getInventory().getItemInMainHand();
+                    if (product.getType().isAir()) { error(sender, "请把要出售的商品拿在主手。"); return true; }
+                    if (product.getAmount() > product.getMaxStackSize()) { error(sender, "商品数量不能超过最大堆叠数。"); return true; }
+                    plugin.getGuiListener().openSetup(player, shop, product);
+                }
             }
             default -> { }
         }
         return true;
+    }
+
+    private void extensionCommand(CommandSender sender, String[] args) {
+        if (args.length != 2 || (!args[1].equalsIgnoreCase("list") && !args[1].equalsIgnoreCase("reload"))) {
+            error(sender, "用法：/qdshop extension list|reload"); return;
+        }
+        String action = args[1].toLowerCase(Locale.ROOT);
+        if (!allowed(sender, "extension." + action)) { error(sender, "你没有权限执行这个拓展命令。"); return; }
+        var registry = plugin.getExtensionRegistry();
+        if (action.equals("reload")) {
+            plugin.getGuiListener().closeAll();
+            try {
+                registry.reload();
+                success(sender, "拓展重载完成：已加载 " + registry.list().size() + " 个，失败 JAR " + registry.getFailures().size() + " 个。");
+            } catch (java.io.IOException e) { error(sender, "扫描拓展目录失败：" + e.getMessage()); }
+        } else {
+            Component message = Component.text("拓展 (" + registry.list().size() + "): ", NamedTextColor.WHITE);
+            boolean first = true;
+            for (var extension : registry.list()) {
+                if (!first) message = message.append(Component.text(", "));
+                first = false;
+                message = message.append(Component.text(extension.getId(), NamedTextColor.GREEN)
+                        .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text(
+                                extension.getDescription() + "\n作者：" + extension.getAuthor()))));
+            }
+            for (String failure : registry.getFailures()) {
+                if (!first) message = message.append(Component.text(", "));
+                first = false;
+                message = message.append(Component.text(failure + "（加载失败）", NamedTextColor.RED));
+            }
+            sender.sendMessage(message);
+        }
     }
 
     private void bindContainer(CommandSender sender, String[] args, Shop shop, boolean stock) {
@@ -158,9 +216,19 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
                 + " " + location.getBlockX() + " " + location.getBlockY() + " " + location.getBlockZ());
     }
 
+    private boolean allowed(CommandSender sender, String sub, Shop shop) {
+        if (sender instanceof Player player && Perms.isOwnerCommand(sub)) {
+            return plugin.getPerms().canManage(player, shop, sub);
+        }
+        return allowed(sender, sub);
+    }
+
     private boolean allowed(CommandSender sender, String sub) {
+        if (sub.equals("version")) return true;
+        if (sub.equals("extension")) return allowed(sender, "extension.list") || allowed(sender, "extension.reload");
         if (sub.equals("help")) return sender.hasPermission(Perms.CMD + "help");
         if (sender instanceof Player player) {
+            if (Perms.isOwnerCommand(sub) && plugin.getShopStore().all().stream().anyMatch(shop -> shop.isOwner(player.getUniqueId()))) return true;
             return sub.equals("open") ? plugin.getPerms().canTrade(player) : plugin.getPerms().admin(player, sub);
         }
         return sub.equals("open") ? sender.hasPermission(Perms.USE)
@@ -172,6 +240,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
             case "name" -> " <name>";
             case "owner" -> " <player>";
             case "infinite" -> " true|false";
+            case "addex" -> " <extension> [<arguments>...]";
             case "remove" -> " <number>";
             case "inventory", "income" -> " [<x> <y> <z> <world>]";
             default -> "";
@@ -185,6 +254,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
     private void help(CommandSender sender) {
         sender.sendMessage(Msg.mm("<gold>===== QIDIAN SHOP ====="));
         sender.sendMessage(Component.text("/qdshop help 显示帮助菜单"));
+        sender.sendMessage(Component.text("/qdshop version 显示插件版本"));
         sender.sendMessage(Component.text("/qdshop create <id> 创建商店"));
         sender.sendMessage(Component.text("/qdshop destroy <id> 删除商店"));
         sender.sendMessage(Component.text("/qdshop remove <id> <number> 删除第几个商品（编号从 1 开始）"));
@@ -195,7 +265,9 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("/qdshop inventory <id> [<x> <y> <z> <world>] 设置存货容器（省略坐标则使用准星目标）"));
         sender.sendMessage(Component.text("/qdshop income <id> [<x> <y> <z> <world>] 设置收入容器（省略坐标则使用准星目标）"));
         sender.sendMessage(Component.text("/qdshop owner <id> <player> 设置商店主人"));
-        sender.sendMessage(Component.text("/qdshop add <id> 主手商品上架，打开箱子界面设置价格"));
+        sender.sendMessage(Component.text("/qdshop extension list|reload 列出或重载拓展"));
+        sender.sendMessage(Component.text("/qdshop add <id> 添加主手普通商品"));
+        sender.sendMessage(Component.text("/qdshop addex <id> <extension> [<arguments>...] 添加拓展商品"));
     }
 
     @Override
@@ -203,10 +275,23 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         if (args.length == 0) return List.of();
         String sub = args[0].toLowerCase(Locale.ROOT);
         if (args.length == 1) return matches(SUBCOMMANDS.stream().filter(s -> allowed(sender, s)).toList(), args[0]);
-        if (!SUBCOMMANDS.contains(sub) || !allowed(sender, sub) || sub.equals("help") || sub.equals("reload")) return List.of();
+        if (!SUBCOMMANDS.contains(sub) || !allowed(sender, sub) || sub.equals("help") || sub.equals("reload") || sub.equals("version")) return List.of();
+        if (sub.equals("extension")) {
+            return args.length == 2 ? matches(List.of("list", "reload").stream()
+                    .filter(action -> allowed(sender, "extension." + action)).toList(), args[1]) : List.of();
+        }
+        if (args.length >= 3 && Perms.isOwnerCommand(sub)
+                && !allowed(sender, sub, plugin.getShopStore().get(args[1]))) return List.of();
+        if (sub.equals("addex") && args.length >= 3) {
+            if (args.length == 3) return matches(plugin.getExtensionRegistry().list().stream().map(e -> e.getId()).toList(), args[2]);
+            var extension = plugin.getExtensionRegistry().get(args[2]);
+            if (extension == null) return List.of();
+            try { return matches(extension.completeArguments(sender, List.copyOf(Arrays.asList(args).subList(3, args.length))), args[args.length - 1]); }
+            catch (Exception | LinkageError e) { return List.of(); }
+        }
         if (args.length == 2) {
             if (sub.equals("create")) return matches(List.of("<id>"), args[1]);
-            return matches(plugin.getShopStore().all().stream().map(Shop::getId).toList(), args[1]);
+            return matches(plugin.getShopStore().all().stream().filter(shop -> allowed(sender, sub, shop)).map(Shop::getId).toList(), args[1]);
         }
         if (sub.equals("infinite") && args.length == 3) return matches(List.of("true", "false"), args[2]);
         if (sub.equals("remove") && args.length == 3) {

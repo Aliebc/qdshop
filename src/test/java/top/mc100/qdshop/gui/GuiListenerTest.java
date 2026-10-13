@@ -38,6 +38,7 @@ class GuiListenerTest {
         UUID editor = UUID.randomUUID();
         when(plugin.getShopStore()).thenReturn(store);
         when(plugin.getPerms()).thenReturn(perms);
+        when(perms.canManage(eq(player), any(), anyString())).thenAnswer(call -> perms.admin(player, call.getArgument(2)));
         when(player.getUniqueId()).thenReturn(editor);
         when(gui.getEditor()).thenReturn(editor);
         when(gui.getInventory()).thenReturn(inventory);

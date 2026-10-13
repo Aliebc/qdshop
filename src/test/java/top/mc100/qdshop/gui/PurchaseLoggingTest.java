@@ -51,6 +51,7 @@ class PurchaseLoggingTest {
         ShopStore store = mock(ShopStore.class);
         Perms perms = mock(Perms.class);
         TransactionDatabase database = mock(TransactionDatabase.class);
+        when(plugin.getLogger()).thenReturn(mock(java.util.logging.Logger.class));
         when(plugin.getShopStore()).thenReturn(store);
         when(plugin.getPerms()).thenReturn(perms);
         when(plugin.getTransactionDatabase()).thenReturn(database);

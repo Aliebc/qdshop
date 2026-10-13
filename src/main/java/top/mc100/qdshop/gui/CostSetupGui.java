@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.UUID;
+import java.util.List;
 
 /** 管理员用箱子界面设置付款样品；商品只复制主手样品。 */
 public final class CostSetupGui implements InventoryHolder {
@@ -21,10 +22,17 @@ public final class CostSetupGui implements InventoryHolder {
     private final Shop shop;
     private final ItemStack product;
     private final UUID editor;
+    private final String extensionId;
+    private final List<String> arguments;
     private final Inventory inventory;
     private boolean finishing;
 
     public CostSetupGui(Shop shop, ItemStack product, UUID editor) {
+        this(shop, product, editor, null, List.of());
+    }
+    public CostSetupGui(Shop shop, ItemStack product, UUID editor, String extensionId, List<String> arguments) {
+        this.extensionId = extensionId;
+        this.arguments = List.copyOf(arguments);
         this.shop = shop;
         this.product = product.clone();
         this.editor = editor;
@@ -50,6 +58,8 @@ public final class CostSetupGui implements InventoryHolder {
     public void open(Player player) { player.openInventory(inventory); }
     public Shop getShop() { return shop; }
     public ItemStack getProduct() { return product.clone(); }
+    public String getExtensionId() { return extensionId; }
+    public List<String> getArguments() { return arguments; }
     public UUID getEditor() { return editor; }
     public boolean isFinishing() { return finishing; }
     public void setFinishing() { finishing = true; }

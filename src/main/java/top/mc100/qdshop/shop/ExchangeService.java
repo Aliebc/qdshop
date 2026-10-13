@@ -18,13 +18,14 @@ public final class ExchangeService {
     private ExchangeService() {}
 
     public static Reservation reserve(Player player, MerchantInventory inventory, Shop shop, Trade trade) {
+        if (!trade.isAvailable()) return null;
         ItemStack first = inventory.getItem(0), second = inventory.getItem(1);
         ItemStack cost = trade.getCost(), cost2 = trade.getSecondCost();
         if (cost2 == null) {
             if (!enough(first, cost) && !enough(second, cost)) return null;
         } else if (!((enough(first, cost) && enough(second, cost2))
                 || (enough(first, cost2) && enough(second, cost)))) return null;
-        if (shop.isInfinite()) return new Reservation(shop, trade, List.of(), false);
+        if (shop.isInfinite() || !trade.requiresStock()) return new Reservation(shop, trade, List.of(), false);
         ItemStack result = trade.getResult();
         List<Container> stock = Containers.resolveAll(shop.getStockChests());
         if (stock.isEmpty()) {
