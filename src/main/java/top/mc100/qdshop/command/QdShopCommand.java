@@ -26,7 +26,7 @@ import java.util.Locale;
 import java.util.TreeSet;
 
 public final class QdShopCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBCOMMANDS = List.of("help", "create", "destroy", "remove", "reload", "open", "name", "inventory", "income", "owner", "add");
+    private static final List<String> SUBCOMMANDS = List.of("help", "create", "destroy", "remove", "reload", "open", "name", "inventory", "income", "owner", "add", "infinite");
     private final QdShopPlugin plugin;
 
     public QdShopCommand(QdShopPlugin plugin) { this.plugin = plugin; }
@@ -46,7 +46,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         }
         boolean valid = switch (sub) {
             case "name" -> args.length >= 3;
-            case "owner", "remove" -> args.length == 3;
+            case "owner", "remove", "infinite" -> args.length == 3;
             case "inventory", "income" -> args.length == 2 || args.length == 6;
             default -> args.length == 2;
         };
@@ -85,6 +85,16 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
                 shop.getTrades().remove(number - 1);
                 store.save();
                 success(sender, "已删除商店 " + shop.getId() + " 的第 " + number + " 个商品。");
+            }
+            case "infinite" -> {
+                if (!args[2].equalsIgnoreCase("true") && !args[2].equalsIgnoreCase("false")) {
+                    error(sender, "用法：/qdshop infinite <id> true|false");
+                    return true;
+                }
+                shop.setInfinite(Boolean.parseBoolean(args[2]));
+                store.save();
+                plugin.getGuiListener().queueStockRefresh(shop);
+                success(sender, "商店 " + shop.getId() + " 无限供货已" + (shop.isInfinite() ? "开启。" : "关闭。"));
             }
             case "name" -> {
                 shop.setDisplayName(String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
@@ -161,6 +171,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         String tail = switch (sub) {
             case "name" -> " <name>";
             case "owner" -> " <player>";
+            case "infinite" -> " true|false";
             case "remove" -> " <number>";
             case "inventory", "income" -> " [<x> <y> <z> <world>]";
             default -> "";
@@ -178,6 +189,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("/qdshop destroy <id> 删除商店"));
         sender.sendMessage(Component.text("/qdshop remove <id> <number> 删除第几个商品（编号从 1 开始）"));
         sender.sendMessage(Component.text("/qdshop reload 重载 config.yml 和 shops.yml"));
+        sender.sendMessage(Component.text("/qdshop infinite <id> true|false 设置无限供货"));
         sender.sendMessage(Component.text("/qdshop open <id> 打开商店"));
         sender.sendMessage(Component.text("/qdshop name <id> <name> 设置商店显示名称"));
         sender.sendMessage(Component.text("/qdshop inventory <id> [<x> <y> <z> <world>] 设置存货容器（省略坐标则使用准星目标）"));
@@ -196,6 +208,7 @@ public final class QdShopCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("create")) return matches(List.of("<id>"), args[1]);
             return matches(plugin.getShopStore().all().stream().map(Shop::getId).toList(), args[1]);
         }
+        if (sub.equals("infinite") && args.length == 3) return matches(List.of("true", "false"), args[2]);
         if (sub.equals("remove") && args.length == 3) {
             Shop shop = plugin.getShopStore().get(args[1]);
             return matches(shop == null ? List.of() : java.util.stream.IntStream.rangeClosed(1, shop.getTrades().size())

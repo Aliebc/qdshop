@@ -32,9 +32,10 @@ import java.util.UUID;
 public final class GuiListener implements Listener {
     private final QdShopPlugin plugin;
     private final Map<UUID, ShopGui> sessions = new HashMap<>();
+    private final java.util.Set<Shop> refreshQueued = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<UUID, CostSetupGui> setups = new HashMap<>();
     private final Map<PlayerPurchaseEvent, PendingPurchase> pending = new IdentityHashMap<>();
-    private record PendingPurchase(ExchangeService.Reservation reservation, TradeLogEntry entry) {}
+    private record PendingPurchase(ExchangeService.Reservation reservation, TradeLogEntry entry, Shop shop) {}
 
     public GuiListener(QdShopPlugin plugin) { this.plugin = plugin; }
 
@@ -88,10 +89,11 @@ public final class GuiListener implements Listener {
         }
         ExchangeService.Reservation reservation = ExchangeService.reserve(player, inventory, gui.getShop(), trade);
         if (reservation == null) {
+            queueStockRefresh(gui.getShop());
             event.setCancelled(true);
             return;
         }
-        pending.put(event, new PendingPurchase(reservation, entry));
+        pending.put(event, new PendingPurchase(reservation, entry, gui.getShop()));
         event.setRewardExp(false);
         event.setIncreaseTradeUses(false);
     }
@@ -100,12 +102,33 @@ public final class GuiListener implements Listener {
     public void onPurchaseFinished(PlayerPurchaseEvent event) {
         PendingPurchase purchase = pending.remove(event);
         if (purchase == null) return;
+        queueStockRefresh(purchase.shop());
         if (event.isCancelled()) {
             purchase.reservation().rollback();
             return;
         }
         purchase.reservation().commit();
         plugin.getTransactionDatabase().record(purchase.entry());
+    }
+
+    /** 合并同一 tick 内的连续购买，成交完成后的下一 tick 同步所有正在浏览本店的窗口。 */
+    public void queueStockRefresh(Shop shop) {
+        if (!refreshQueued.add(shop)) return;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!refreshQueued.remove(shop)) return;
+            for (var entry : java.util.List.copyOf(sessions.entrySet())) {
+                ShopGui gui = entry.getValue();
+                if (gui.getShop() != shop) continue;
+                Player player = Bukkit.getPlayer(entry.getKey());
+                if (player == null || !(player.getOpenInventory().getTopInventory() instanceof MerchantInventory inventory)
+                        || inventory.getMerchant() != gui.getMerchant()) continue;
+                gui.refreshStock();
+                try { MerchantSynchronizer.sync(player, gui.getMerchant()); }
+                catch (ReflectiveOperationException e) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "同步商店交易列表失败（Paper 26.2）", e);
+                }
+            }
+        });
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -147,7 +170,7 @@ public final class GuiListener implements Listener {
             if (cost == null) { cost = secondCost; secondCost = null; }
             gui.getShop().getTrades().add(new Trade(cost.clone(), secondCost == null ? null : secondCost.clone(), gui.getProduct()));
             plugin.getShopStore().save();
-            player.sendMessage(Component.text("商品已上架，请向存货容器放入足够库存。", NamedTextColor.GREEN));
+            player.sendMessage(Component.text(gui.getShop().isInfinite() ? "商品已上架，当前商店为无限供货。" : "商品已上架，请向存货容器放入足够库存。", NamedTextColor.GREEN));
             finishSetup(player, gui);
         }
     }
@@ -230,6 +253,7 @@ public final class GuiListener implements Listener {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player != null) refundSetup(player, entry.getValue());
         }
+        refreshQueued.clear();
         setups.clear();
         sessions.clear();
         for (PendingPurchase purchase : pending.values()) purchase.reservation().rollback();

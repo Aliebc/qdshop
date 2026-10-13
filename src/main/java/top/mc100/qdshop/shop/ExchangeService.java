@@ -24,6 +24,7 @@ public final class ExchangeService {
             if (!enough(first, cost) && !enough(second, cost)) return null;
         } else if (!((enough(first, cost) && enough(second, cost2))
                 || (enough(first, cost2) && enough(second, cost)))) return null;
+        if (shop.isInfinite()) return new Reservation(shop, trade, List.of(), false);
         ItemStack result = trade.getResult();
         List<Container> stock = Containers.resolveAll(shop.getStockChests());
         if (stock.isEmpty()) {
@@ -43,7 +44,7 @@ public final class ExchangeService {
             }
             return null;
         }
-        return new Reservation(shop, trade, stock);
+        return new Reservation(shop, trade, stock, true);
     }
 
     public static boolean settleMerchantPurchase(Player player, MerchantInventory inventory, Shop shop, Trade trade) {
@@ -57,21 +58,24 @@ public final class ExchangeService {
         private final Shop shop;
         private final Trade trade;
         private final List<Container> stock;
+        private final boolean reservedStock;
         private boolean finished;
-        private Reservation(Shop shop, Trade trade, List<Container> stock) {
-            this.shop = shop; this.trade = trade; this.stock = stock;
+        private Reservation(Shop shop, Trade trade, List<Container> stock, boolean reservedStock) {
+            this.shop = shop; this.trade = trade; this.stock = stock; this.reservedStock = reservedStock;
         }
         public void commit() {
             if (finished) return;
             finished = true;
             List<Container> receive = Containers.resolveAll(shop.receiveTargets());
             if (receive.isEmpty()) receive = stock;
+            // 没有任何收款容器时，原生界面仍扣付款；虚拟收入由交易日志保存。
+            if (receive.isEmpty()) return;
             for (ItemStack cost : trade.getCosts()) depositOrDrop(receive, cost.clone(), shop);
         }
         public void rollback() {
             if (finished) return;
             finished = true;
-            depositOrDrop(stock, trade.getResult().clone(), shop);
+            if (reservedStock) depositOrDrop(stock, trade.getResult().clone(), shop);
         }
     }
 
@@ -81,7 +85,7 @@ public final class ExchangeService {
     private static void depositOrDrop(List<Container> targets, ItemStack item, Shop shop) {
         ItemStack leftover = Containers.add(targets, item);
         if (leftover != null) {
-            Location dropAt = shop.getStockChests().getFirst().clone().add(0.5, 1, 0.5);
+            Location dropAt = targets.getFirst().getLocation().clone().add(0.5, 1, 0.5);
             dropAt.getWorld().dropItemNaturally(dropAt, leftover);
         }
     }

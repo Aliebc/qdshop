@@ -3,6 +3,7 @@ package top.mc100.qdshop.gui;
 import top.mc100.qdshop.model.Shop;
 import top.mc100.qdshop.model.Trade;
 import top.mc100.qdshop.util.Msg;
+import top.mc100.qdshop.util.Containers;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.MenuType;
@@ -34,6 +35,21 @@ public final class ShopGui {
             recipes.add(recipe);
         }
         merchant.setRecipes(recipes);
+        refreshStock();
+    }
+
+    /** 使用次数达到上限时，原生界面显示需要补货的红叉。 */
+    public void refreshStock() {
+        var stock = shop.isInfinite() ? List.<org.bukkit.block.Container>of() : Containers.resolveAll(shop.getStockChests());
+        for (int i = 0; i < trades.size(); i++) {
+            Trade trade = trades.get(i);
+            int available = shop.isInfinite() ? Integer.MAX_VALUE
+                    : Math.max(0, Containers.count(stock, trade.getResult()) / trade.getResult().getAmount());
+            MerchantRecipe recipe = merchant.getRecipe(i);
+            recipe.setUses(0);
+            recipe.setMaxUses(available);
+            merchant.setRecipe(i, recipe);
+        }
     }
 
     private static boolean valid(Trade trade) {

@@ -102,7 +102,7 @@ class QdShopCommandTest {
             bukkit.when(Bukkit::getOfflinePlayers).thenReturn(new OfflinePlayer[0]);
             when(player.getName()).thenReturn("Owner");
             bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(player));
-            assertEquals(11, command.onTabComplete(player, null, "qdshop", new String[]{""}).size());
+            assertEquals(12, command.onTabComplete(player, null, "qdshop", new String[]{""}).size());
             assertEquals(List.of("demo"), command.onTabComplete(player, null, "qdshop", new String[]{"add", "d"}));
             assertEquals(List.of("10"), command.onTabComplete(player, null, "qdshop", new String[]{"inventory", "demo", ""}));
             assertEquals(List.of("64"), command.onTabComplete(player, null, "qdshop", new String[]{"income", "demo", "10", ""}));
@@ -135,5 +135,18 @@ class QdShopCommandTest {
         execute("reload", "unexpected");
         verify(plugin, times(1)).reloadShopConfig();
         assertTrue(command.onTabComplete(player, null, "qdshop", new String[]{"reload", ""}).isEmpty());
+    }
+    @Test void infiniteCommandPersistsFlagAndRejectsInvalidBoolean() {
+        var gui = mock(top.mc100.qdshop.gui.GuiListener.class);
+        when(plugin.getGuiListener()).thenReturn(gui);
+        execute("infinite", "demo", "true");
+        assertTrue(shop.isInfinite());
+        execute("infinite", "demo", "bad");
+        assertTrue(shop.isInfinite());
+        execute("infinite", "demo", "false");
+        assertFalse(shop.isInfinite());
+        verify(store, times(2)).save();
+        verify(gui, times(2)).queueStockRefresh(shop);
+        assertEquals(List.of("false", "true"), command.onTabComplete(player, null, "qdshop", new String[]{"infinite", "demo", ""}));
     }
 }

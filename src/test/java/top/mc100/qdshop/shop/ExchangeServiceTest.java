@@ -148,4 +148,29 @@ class ExchangeServiceTest {
         assertEquals(6, f.contents[0].getAmount());
         assertEquals(0, f.received.get());
     }
+    @Test void infiniteSupplySkipsStockReadsAndStillCollectsBothPayments() {
+        Fixture f = new Fixture();
+        when(f.shop.isInfinite()).thenReturn(true);
+        Trade trade = new Trade(f.cost, item("second-payment", 3), f.product);
+        when(f.inputs.getItem(1)).thenReturn(item("second-payment", 3));
+        for (int i = 0; i < 20; i++) assertTrue(ExchangeService.settleMerchantPurchase(f.player, f.inputs, f.shop, trade));
+        assertEquals(100, f.received.get());
+        assertEquals(6, f.contents[0].getAmount());
+        verify(f.shop, never()).getStockChests();
+    }
+
+    @Test void infiniteWithoutAnyContainersWorksButInsufficientPaymentStillFails() {
+        Fixture f = new Fixture();
+        when(f.shop.isInfinite()).thenReturn(true);
+        when(f.shop.receiveTargets()).thenReturn(List.of());
+        assertTrue(f.buy());
+        var reservation = ExchangeService.reserve(f.player, f.inputs, f.shop, f.trade);
+        assertNotNull(reservation);
+        reservation.rollback();
+        assertEquals(6, f.contents[0].getAmount());
+        assertEquals(0, f.received.get());
+        when(f.inputs.getItem(0)).thenReturn(item("payment", 1));
+        assertFalse(f.buy());
+        verify(f.shop, never()).getStockChests();
+    }
 }

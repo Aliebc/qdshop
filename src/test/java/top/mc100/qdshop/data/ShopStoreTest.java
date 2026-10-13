@@ -18,11 +18,13 @@ class ShopStoreTest {
         Shop shop = new Shop("demo");
         UUID owner = UUID.randomUUID();
         shop.setOwner(owner);
+        shop.setInfinite(true);
         shop.setDisplayName("起点商店");
         store.add(shop);
         store.save();
         store.load();
         assertEquals(owner, store.get("DEMO").getOwner());
+        assertTrue(store.get("demo").isInfinite());
         assertEquals("起点商店", store.get("demo").getDisplayName());
     }
     @Test void unboundHalfOfDoubleChestResolvesTheBoundShop() {

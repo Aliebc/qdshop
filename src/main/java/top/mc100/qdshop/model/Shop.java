@@ -11,6 +11,7 @@ public class Shop {
 
     private final String id;          // 唯一标识（命令中引用）
     private UUID owner;
+    private boolean infinite;
     private String displayName;       // 商店显示名（支持颜色/MiniMessage）
     private final List<Location> stockChests = new ArrayList<>();   // 取货箱（可绑多个，从这些箱子取货给顾客）
     private final List<Location> incomeChests = new ArrayList<>();  // 收货箱（顾客付款存入；为空则存入取货箱）
@@ -25,6 +26,9 @@ public class Shop {
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
+
+    public boolean isInfinite() { return infinite; }
+    public void setInfinite(boolean infinite) { this.infinite = infinite; }
 
     public UUID getOwner() { return owner; }
     public void setOwner(UUID owner) { this.owner = owner; }

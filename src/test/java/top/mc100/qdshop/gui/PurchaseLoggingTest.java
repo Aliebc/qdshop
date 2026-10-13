@@ -2,6 +2,7 @@ package top.mc100.qdshop.gui;
 
 import io.papermc.paper.event.player.PlayerPurchaseEvent;
 import org.bukkit.Location;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -77,7 +78,9 @@ class PurchaseLoggingTest {
         try (var construction = mockConstruction(ShopGui.class, (gui, context) -> {
             when(gui.getMerchant()).thenReturn(merchant); when(gui.getShop()).thenReturn(shop);
             when(gui.getTrade(0)).thenReturn(trade);
-        }); var exchange = mockStatic(ExchangeService.class)) {
+        }); var exchange = mockStatic(ExchangeService.class); var bukkit = mockStatic(Bukkit.class)) {
+            var scheduler = mock(org.bukkit.scheduler.BukkitScheduler.class);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
             exchange.when(() -> ExchangeService.reserve(player, inventory, shop, trade)).thenReturn(inStock ? reservation : null);
             GuiListener listener = new GuiListener(plugin);
             listener.openShop(player, shop);

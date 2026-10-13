@@ -84,6 +84,7 @@ public class ShopStore {
             ConfigurationSection s = root.getConfigurationSection(id);
             if (s == null) continue;
             Shop shop = new Shop(id);
+            shop.setInfinite(s.getBoolean("infinite", false));
             shop.setDisplayName(s.getString("display", id));
             String owner = s.getString("owner");
             if (owner != null) {
@@ -116,6 +117,7 @@ public class ShopStore {
         for (Shop shop : byId.values()) {
             String base = "shops." + shop.getId() + ".";
             yml.set(base + "display", shop.getDisplayName());
+            yml.set(base + "infinite", shop.isInfinite());
             yml.set(base + "owner", shop.getOwner() == null ? null : shop.getOwner().toString());
             List<String> stock = new ArrayList<>();
             for (Location l : shop.getStockChests()) stock.add(serializeLoc(l));
