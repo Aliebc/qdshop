@@ -1,0 +1,10 @@
+# QIDIAN SHOP 配置
+# 商店数据保存在 plugins/top.mc100.qdshop/shops.yml。
+
+# 只有商店主人或拥有开箱权限的玩家才能打开或破坏商店绑定的库存箱和收货箱。
+chest-protection:
+  enabled: true
+
+# 已安装 LuckPerms 时使用 qdshop.* 权限节点；未安装时管理权限由 OP 判断。
+permissions:
+  op-always-admin: false

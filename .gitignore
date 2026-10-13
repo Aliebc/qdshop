@@ -1,0 +1,42 @@
+# Maven build outputs
+target/
+dist/
+
+# qdbank runtime data
+qdbank.db
+qdbank.db-shm
+qdbank.db-wal
+logs/
+*.log
+
+# Runtime configuration generated beside the standalone server JAR
+/config.yml
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Visual Studio Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Java crash and diagnostic files
+hs_err_pid*
+replay_pid*
+*.hprof
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+*.jar

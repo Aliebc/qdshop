@@ -1,0 +1,64 @@
+name: qdshop
+version: '1.0.0'
+main: top.mc100.qdshop.QdShopPlugin
+api-version: '26.2'
+prefix: QIDIAN SHOP
+description: QIDIAN SHOP - 起点商店交易系统
+authors: [AWAFAI, QIDIAN SERVER]
+softdepend: [LuckPerms]
+commands:
+  qdshop:
+    description: QIDIAN SHOP 商店管理
+    usage: '/qdshop help'
+permissions:
+  qdshop.*:
+    description: QIDIAN SHOP 全部权限
+    default: false
+    children:
+      qdshop.command.help: true
+      qdshop.use: true
+      qdshop.admin: true
+      qdshop.chest.open: true
+  qdshop.use:
+    description: 允许打开商店和交易
+    default: true
+  qdshop.admin:
+    description: QIDIAN SHOP 管理员
+    default: op
+    children:
+      qdshop.use: true
+      qdshop.chest.open: true
+      qdshop.command.create: true
+      qdshop.command.remove: true
+      qdshop.command.name: true
+      qdshop.command.inventory: true
+      qdshop.command.income: true
+      qdshop.command.owner: true
+      qdshop.command.add: true
+  qdshop.chest.open:
+    description: 允许打开或破坏商店库存及收货箱
+    default: op
+  qdshop.command.create:
+    description: 创建商店
+    default: op
+  qdshop.command.remove:
+    description: 删除商店
+    default: op
+  qdshop.command.name:
+    description: 修改商店显示名称
+    default: op
+  qdshop.command.inventory:
+    description: 设置库存容器
+    default: op
+  qdshop.command.income:
+    description: 设置收入容器
+    default: op
+  qdshop.command.owner:
+    description: 设置商店主人
+    default: op
+  qdshop.command.add:
+    description: 添加商品
+    default: op
+  qdshop.command.help:
+    description: 显示帮助菜单
+    default: true
